@@ -75,9 +75,28 @@ class SelectorBIC(ModelSelector):
         :return: GaussianHMM object
         """
         warnings.filterwarnings("ignore", category=DeprecationWarning)
+		
+        lowest_bic = float("inf")
+        bic = []
+        best_component = 0
+        n_components_range = range(self.min_n_components,self.max_n_components)
+        for n in n_components_range:
+            try:
+                model = self.base_model(n)
+                self.n = model.n_components
+                self.d = model.n_features
+                self.p = self.n ** 2 + 2 * self.n * self.d - 1
+                score = -2 * model.score(self.X,self.lengths) + self.p * np.log(len(self.X))
+                bic.append(score)
+                if bic[-1] < lowest_bic:
+                    lowest_bic = bic[-1]
+                    best_component = n
+            except:
+                pass
+        return self.base_model(best_component)
+			
 
         # TODO implement model selection based on BIC scores
-        raise NotImplementedError
 
 
 class SelectorDIC(ModelSelector):
@@ -94,7 +113,31 @@ class SelectorDIC(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection based on DIC scores
-        raise NotImplementedError
+        lowest_DIC = float("-inf")
+        best_component = 0
+        DIC = []
+        n_components_range = range(self.min_n_components,self.max_n_components)
+        for n in n_components_range:
+            try:
+            
+                model = self.base_model(n)
+                likelihood = model.score(self.X,self.lengths)
+                sum = 0
+                for word in self.words:
+                    if word == self.this_word:
+                        continue
+                    X, lengths = self.hwords[word]
+                    logL = model.score(X,lengths)
+                    sum += logL
+                score = likelihood - (sum/(len(self.words)-1))
+                DIC.append(score)
+                if DIC[-1] > lowest_DIC:
+                    lowest_DIC = DIC[-1]
+                    best_component = n
+            except:
+                pass
+        
+        return self.base_model(best_component)
 
 
 class SelectorCV(ModelSelector):
@@ -106,4 +149,40 @@ class SelectorCV(ModelSelector):
         warnings.filterwarnings("ignore", category=DeprecationWarning)
 
         # TODO implement model selection using CV
-        raise NotImplementedError
+        lowest_score = float("-inf")
+        split_method = KFold()
+        n_components_range = range(self.min_n_components,self.max_n_components)
+        Logliklihood = []
+        best_component = 0
+        for n in n_components_range:
+            try:
+            
+                if len(self.sequences) >= 3:
+                    sum = 0
+                    fold = 0
+                    for cv_train_idx,cv_test_idx in split_method.split(self.sequences):
+                        X_test, lengths_test = combine_sequences(cv_test_idx,self.sequences)
+                        X_train, lengths_train = combine_sequences(cv_train_idx,self.sequences)
+                        model = GaussianHMM(n, covariance_type="diag", n_iter=1000,random_state=self.random_state, verbose=False).fit(X_train,lengths_train)
+                
+                        logL = model.score(X_test,lengths_test)
+                        sum += logL
+                        fold += 1
+                    score = sum/fold
+                    Logliklihood.append(score)
+                    
+                else: 
+                    model = self.base_model(n)
+                    logL = model.score(self.X,self.lengths)
+                    Logliklihood.append(logL)
+                
+                if Logliklihood[-1] > lowest_score:
+                    lowest_score = Logliklihood[-1]
+                    best_component = n
+            except:
+                pass
+        
+        return self.base_model(best_component)
+                
+            
+                
